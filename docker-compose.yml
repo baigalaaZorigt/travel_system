@@ -1,0 +1,51 @@
+# Нэг командаар 3 контейнер (сан, backend, frontend) хамт асаах тохиргоо.
+# Нууц үг, IP хаягийг энд бичихгүй: хажууд байгаа .env файлаас ${НЭР} хэлбэрээр уншина.
+
+services:                                   # Ажиллах контейнерүүдийн жагсаалт
+
+  # ---------------- 1. Өгөгдлийн сан ----------------
+  db:                                       # Service-ийн нэр. Бусад нь "db" гэдэг хаягаар хандана
+    image: postgres:16                      # Албан ёсны PostgreSQL 16 image
+    restart: unless-stopped                 # Унтарвал автоматаар дахин асна (гараар зогсоосноос бусад үед)
+    environment:                            # Контейнерт өгөх тохиргоо
+      POSTGRES_USER: student                # Сангийн хэрэглэгчийн нэр
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env-д POSTGRES_PASSWORD бөглөнө үү}  # Нууц үг .env-ээс. Хоосон бол асахгүй
+      POSTGRES_DB: travel                   # Анх асахад үүсгэх сангийн нэр
+    volumes:                                # Компьютер ↔ контейнерийн хооронд холбох хавтас, файл
+      - db_data:/var/lib/postgresql/data    # Сангийн өгөгдлийг байнгын хадгална (контейнер устсан ч үлдэнэ)
+      - ./synthetic_data.sql:/docker-entrypoint-initdb.d/01_synthetic_data.sql:ro  # Сан ХООСОН үед л нэг удаа ачаална. ro = зөвхөн унших
+    healthcheck:                            # Сан бэлэн болсон эсэхийг шалгах арга
+      test: ["CMD-SHELL", "pg_isready -U student -d travel"]  # Холболт хүлээн авч байна уу гэж асууна
+      interval: 5s                          # 5 секунд тутам шалгана
+      timeout: 5s                           # Хариу 5 секундэд ирэхгүй бол бүтэлгүй гэж үзнэ
+      retries: 10                           # 10 удаа бүтэлгүйтвэл "өвчтэй" гэж тэмдэглэнэ
+    # ports хэсэг санаатай байхгүй: сан гаднаас (интернэтээс) харагдахгүй, зөвхөн backend хандана
+
+  # ---------------- 2. Backend (FastAPI) ----------------
+  backend:
+    build: ./travel-backend                 # travel-backend хавтас доторх Dockerfile-аар image бүтээнэ
+    restart: unless-stopped                 # Унтарвал автоматаар дахин асна
+    environment:                            # main.py-ийн уншдаг тохиргоонууд
+      DATABASE_URL: postgresql://student:${POSTGRES_PASSWORD}@db:5432/travel  # "db" = дээрх сангийн service
+      ALLOWED_ORIGINS: http://${EC2_IP:?.env-д EC2_IP бөглөнө үү}              # Зөвхөн энэ хаягаас нээгдсэн хуудсыг зөвшөөрнө (CORS)
+      JWT_SECRET: ${JWT_SECRET:?.env-д JWT_SECRET бөглөнө үү}                  # Нэвтрэх токены нууц түлхүүр
+      MODEL_PATH: demand_model.joblib       # Загварын файл (Dockerfile image дотор хуулсан)
+    ports:
+      - "8000:8000"                         # Компьютерийн 8000 порт → контейнерийн 8000 порт
+    depends_on:                             # Эхлээд юуг асаах вэ
+      db:
+        condition: service_healthy          # Сан бүрэн бэлэн болсны дараа л backend асна
+
+  # ---------------- 3. Frontend (nginx) ----------------
+  frontend:
+    image: nginx:alpine                     # Жижиг, хурдан вэб сервер
+    restart: unless-stopped                 # Унтарвал автоматаар дахин асна
+    volumes:
+      - ./travel-frontend:/usr/share/nginx/html:ro  # HTML/CSS/JS файлуудыг nginx-ийн үйлчлэх хавтаст холбоно
+    ports:
+      - "80:80"                             # Компьютерийн 80 порт → nginx. Хаяг: http://IP (порт бичих шаардлагагүй)
+    depends_on:
+      - backend                             # Backend-ийн дараа асна
+
+volumes:                                    # Нэртэй хадгалах сангууд
+  db_data:                                  # Сангийн өгөгдөл энд хадгалагдана
