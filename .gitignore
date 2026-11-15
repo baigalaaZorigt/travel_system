@@ -14,3 +14,14 @@ __pycache__/
 # ===== Загвар заавал орно (ямар нэг дүрэм хасахаас сэргийлж) =====
 !demand_model.joblib
 !**/demand_model.joblib
+
+# ===== AWS / сервер =====
+.aws/
+*.pem
+*.ppk
+*.key
+credentials.csv
+*_accessKeys.csv
+*.tfstate
+*.tfstate.*
+.terraform/
