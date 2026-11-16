@@ -25,3 +25,6 @@ credentials.csv
 *.tfstate
 *.tfstate.*
 .terraform/
+
+# ===== Claude Code-ийн хувийн санах ой =====
+CLAUDE.local.md
